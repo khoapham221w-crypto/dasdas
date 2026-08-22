@@ -1,29 +1,16 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thánh Nữ v0.5.2</title><link rel="stylesheet" href="style.css"></head>
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Code By Thánh Nữ v0.5.5</title><link rel="stylesheet" href="style.css"></head>
 <body><div class="app">
-<header><div><h1>THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5.2 • Chế độ 1-1</div></header>
+<header><div><h1>CODE BY THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5.5 • Code By Thánh Nữ</div></header>
 
 <section class="card config">
-<div class="title">CẤU HÌNH REQUEST</div>
-<div class="grid4">
-<label>Endpoint<input id="endpoint" placeholder="https://.../api/..."></label>
-<label>Method<select id="method"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option></select></label>
-<label>Body<select id="bodyMode"><option value="json">JSON</option><option value="form">Form URL Encoded</option><option value="query">Query Params</option></select></label>
-<label>Concurrency<input id="conc" type="number" min="1" max="20" value="5"></label>
-
-<label>Field tài khoản<input id="uf" value="username"></label>
-<label>Field code<input id="cf" value="code"></label>
-<label>Timeout ms<input id="timeout" type="number" value="10000"></label>
-<label>OCR scale<select id="ocrScale"><option value="1">1.0x nhanh</option><option value="1.5" selected>1.5x</option><option value="2">2.0x rõ hơn</option></select></label>
+<div class="title">MM88 PRESET</div>
+<div class="preset">
+  <div><span>Endpoint</span><b>https://api.mm88code.com/codes/use-code-public</b></div>
+  <div><span>Method</span><b>POST / JSON</b></div>
+  <div><span>Mapping</span><b>code 1 → acc 1</b></div>
+  <div><span>Concurrency</span><b>1</b></div>
 </div>
-
-<label>Headers JSON<textarea id="headers" class="small"></textarea></label>
-<label>Extra body JSON<textarea id="extra" class="small"></textarea></label>
-
-<div class="row">
-  <label class="check"><input id="stopChallenge" type="checkbox" checked> Dừng toàn bộ batch khi gặp Cloudflare/Turnstile/challenge</label>
-</div>
-<div class="row"><button id="save">💾 Lưu cấu hình</button><button id="test">🧪 Test 1 request</button></div>
-<div class="warn">Có thể dùng cookie/session hợp lệ trong Headers nếu trang yêu cầu. Không dùng token CAPTCHA/Turnstile để né xác minh.</div>
+<div class="warn">API thật có field <b>captchaToken</b>. Bản này không tạo/replay/bypass token xác minh; khi backend yêu cầu xác minh, tool sẽ dừng và báo CẦN XÁC MINH.</div>
 </section>
 
 <section class="cols">
@@ -45,5 +32,5 @@
 
 <section class="card"><div class="title">KẾT QUẢ TỪNG CẶP TÀI KHOẢN / CODE</div><div class="tablewrap"><table><thead><tr><th>Tài khoản</th><th>Code</th><th>HTTP</th><th>Trạng thái</th><th>Response</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 <section class="card"><div class="title">LOG</div><pre id="log"></pre></section>
-<footer>Thánh Nữ v0.5.2 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
+<footer>Thánh Nữ v0.5.4 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
 </div><script src="renderer.js"></script></body></html>

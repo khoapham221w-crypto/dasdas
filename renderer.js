@@ -15,30 +15,23 @@ function log(x){
 }
 
 function cfg(){
-  let h={},e={};
-  try{h=JSON.parse($('headers').value||'{}')}catch{log('Headers JSON không hợp lệ, dùng {}')}
-  try{e=JSON.parse($('extra').value||'{}')}catch{log('Extra body JSON không hợp lệ, dùng {}')}
   return{
-    endpoint:$('endpoint').value.trim(),
-    method:$('method').value,
-    bodyMode:$('bodyMode').value,
-    usernameField:$('uf').value.trim(),
-    codeField:$('cf').value.trim(),
-    headers:h,
-    extraBody:e,
-    concurrency:+$('conc').value||5,
-    timeoutMs:+$('timeout').value||10000,
-    stopOnChallenge:$('stopChallenge').checked,
-    ocrScale:+$('ocrScale').value||1.5,
+    endpoint:'https://api.mm88code.com/codes/use-code-public',
+    method:'POST',
+    bodyMode:'json',
+    usernameField:'username',
+    codeField:'code',
+    headers:{'content-type':'application/json','accept':'application/json'},
+    extraBody:{},
+    concurrency:1,
+    timeoutMs:10000,
+    stopOnChallenge:true,
+    ocrScale:1,
     accounts:lines($('accounts').value),
-    batch:lines($('codes').value)
+    batch:lines($('codes').value).map(x=>x.toUpperCase()).filter(x=>/^[A-Z0-9]{6}$/.test(x))
   };
 }
 
-$('save').onclick=async()=>{
-  await api.save(cfg());
-  $('status').textContent='Đã lưu cấu hình';
-};
 
 $('pick').onclick=()=>api.pick();
 
@@ -81,20 +74,16 @@ $('clear').onclick=()=>{
   $('progressText').textContent='0/0';
 };
 
-$('test').onclick=async()=>{
-  await api.save(cfg());
-  const a=lines($('accounts').value)[0],c=lines($('codes').value)[0];
-  if(!a||!c){$('status').textContent='Cần ít nhất 1 acc và 1 code';return}
-  $('status').textContent='Đang test...';
-  const r=await api.test(a,c);
-  addResult(r);
-  $('status').textContent=r.status;
-};
 
 $('run').onclick=async()=>{
   const c=cfg();
-  if(!c.endpoint){$('status').textContent='Chưa nhập Endpoint';return}
-  if(!c.accounts.length||!c.batch.length){$('status').textContent='Cần tài khoản và code';return}
+  if(!c.accounts.length||!c.batch.length){$('status').textContent='Cần tài khoản và code 6 ký tự';return}
+  const rawCodeCount=lines($('codes').value).length;
+  if(c.batch.length!==rawCodeCount){
+    log(`Đã bỏ ${rawCodeCount-c.batch.length} dòng code không đúng 6 ký tự.`);
+    $('codes').value=c.batch.join('\n');
+    counts();
+  }
   await api.save(c);
   $('rows').innerHTML='';
   $('bar').style.width='0';
@@ -112,22 +101,11 @@ $('stop').onclick=async()=>{
 
 (async()=>{
   const s=await api.state();
-  $('endpoint').value=s.endpoint||'';
-  $('method').value=s.method||'POST';
-  $('bodyMode').value=s.bodyMode||'json';
-  $('uf').value=s.usernameField||'username';
-  $('cf').value=s.codeField||'code';
-  $('conc').value=s.concurrency||5;
-  $('timeout').value=s.timeoutMs||10000;
-  $('stopChallenge').checked=s.stopOnChallenge!==false;
-  $('ocrScale').value=String(s.ocrScale||1.5);
-  $('headers').value=JSON.stringify(s.headers||{'content-type':'application/json'},null,2);
-  $('extra').value=JSON.stringify(s.extraBody||{},null,2);
   $('accounts').value=(s.accounts||[]).join('\n');
   $('codes').value=(s.batch||[]).join('\n');
   if(s.region){
-    const r=s.region;
-    $('regionInfo').textContent=`Vùng OCR: x=${r.x}, y=${r.y}, w=${r.width}, h=${r.height}`;
+    const rr=s.region;
+    $('regionInfo').textContent=`Vùng OCR: x=${rr.x}, y=${rr.y}, w=${rr.width}, h=${rr.height}`;
   }
   counts();
 })();

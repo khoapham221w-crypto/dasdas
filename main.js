@@ -42,6 +42,18 @@ function load(){
       state={...state,...JSON.parse(fs.readFileSync(file,'utf8'))};
     }
   }catch{}
+  // MM88 preset locked in v0.5.3
+  state.endpoint='https://api.mm88code.com/codes/use-code-public';
+  state.method='POST';
+  state.bodyMode='json';
+  state.usernameField='username';
+  state.codeField='code';
+  state.headers={'content-type':'application/json','accept':'application/json'};
+  state.extraBody={};
+  state.concurrency=1;
+  state.timeoutMs=10000;
+  state.stopOnChallenge=true;
+  state.ocrScale=1;
   region=state.ocrRegion||null;
 }
 function log(x){
@@ -63,7 +75,7 @@ function cloudflareSignals(status,headers,data){
   const server=String(h.server||h.Server||'').toLowerCase();
   const cfRay=String(h['cf-ray']||h['CF-RAY']||'');
   const body=typeof data==='string'?data:JSON.stringify(data||{});
-  const bodySignal=/turnstile|cf-turnstile|challenges\.cloudflare\.com|cf_clearance|challenge-platform|verify you are human|checking your browser|just a moment/i.test(body);
+  const bodySignal=/turnstile|cf-turnstile|challenges\.cloudflare\.com|cf_clearance|challenge-platform|captchaToken|captcha token|verify you are human|checking your browser|just a moment/i.test(body);
   const headerSignal=server.includes('cloudflare') || !!cfRay;
   const suspiciousStatus=[403,429,503].includes(Number(status));
   return {
@@ -73,37 +85,21 @@ function cloudflareSignals(status,headers,data){
 }
 
 function buildRequest(account,code){
-  const body={...state.extraBody,[state.usernameField]:account,[state.codeField]:code};
-  const headers={...(state.headers||{})};
-  const method=String(state.method||'POST').toUpperCase();
-  const mode=state.bodyMode||'json';
-
-  const cfg={
-    url:state.endpoint,
-    method,
-    timeout:Number(state.timeoutMs)||10000,
+  // The public MM88 endpoint also requires a valid captchaToken for completed redemption.
+  // Thánh Nữ does not generate/replay/bypass that verification token.
+  return {
+    url:'https://api.mm88code.com/codes/use-code-public',
+    method:'POST',
+    timeout:10000,
     validateStatus:()=>true,
-    headers
+    headers:{
+      'content-type':'application/json',
+      'accept':'application/json',
+      'origin':'https://mm88code.com',
+      'referer':'https://mm88code.com/'
+    },
+    data:{username:account,code}
   };
-
-  if(method==='GET' || method==='DELETE' || mode==='query'){
-    cfg.params=body;
-  }else if(mode==='form'){
-    const form=new URLSearchParams();
-    for(const [k,v] of Object.entries(body)){
-      if(v!==undefined && v!==null) form.append(k,String(v));
-    }
-    cfg.data=form.toString();
-    if(!Object.keys(headers).some(k=>k.toLowerCase()==='content-type')){
-      cfg.headers['content-type']='application/x-www-form-urlencoded';
-    }
-  }else{
-    cfg.data=body;
-    if(!Object.keys(headers).some(k=>k.toLowerCase()==='content-type')){
-      cfg.headers['content-type']='application/json';
-    }
-  }
-  return cfg;
 }
 
 async function sendOne(account,code){
@@ -118,8 +114,10 @@ async function sendOne(account,code){
   try{
     const r=await axios(cfg);
     const sig=cloudflareSignals(r.status,r.headers,r.data);
+    const responseText=textPreview(r.data);
+    const captchaRequired=/captchaToken|captcha token|captcha|turnstile|verification/i.test(responseText);
 
-    if(sig.challenge){
+    if(sig.challenge || captchaRequired){
       if(state.stopOnChallenge){
         stopRequested=true;
         for(const c of activeControllers){
@@ -128,7 +126,7 @@ async function sendOne(account,code){
       }
       return {
         account,code,ok:false,http:r.status,status:'CẦN XÁC MINH',
-        challenge:true,preview:textPreview(r.data)
+        challenge:true,preview:responseText || 'Endpoint yêu cầu xác minh hợp lệ.'
       };
     }
 
@@ -150,6 +148,8 @@ async function sendOne(account,code){
 
 async function runBatch(accounts,codes){
   stopRequested=false;
+  accounts=(accounts||[]).map(x=>String(x).trim()).filter(Boolean);
+  codes=(codes||[]).map(x=>String(x).trim().toUpperCase()).filter(x=>/^[A-Z0-9]{6}$/.test(x));
   const limit=Math.min(accounts.length,codes.length);
   const jobs=[];
   for(let i=0;i<limit;i++){
@@ -300,7 +300,7 @@ async function runOcr(){
     })
     .grayscale()
     .normalize()
-    .resize({width:Math.max(1,Math.round(region.width*scale))})
+    .resize({width:Math.max(1,Math.round(shot.width*scale))})
     .png()
     .toBuffer();
 
@@ -310,9 +310,9 @@ async function runOcr(){
 
   let codes=raw.split(/\r?\n/)
     .map(x=>x.replace(/[^A-Z0-9]/g,''))
-    .filter(x=>x.length>=4&&x.length<=12);
+    .filter(x=>x.length===6);
 
-  if(!codes.length) codes=raw.match(/[A-Z0-9]{4,12}/g)||[];
+  if(!codes.length) codes=raw.match(/\b[A-Z0-9]{6}\b/g)||[];
   codes=[...new Set(codes)];
 
   state.batch=codes;
@@ -326,7 +326,7 @@ async function runOcr(){
 function createWin(){
   win=new BrowserWindow({
     width:1300,height:860,minWidth:1080,minHeight:720,
-    title:'Thánh Nữ v0.5.2',
+    title:'Code By Thánh Nữ v0.5.5',
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
   win.loadFile('renderer.html');

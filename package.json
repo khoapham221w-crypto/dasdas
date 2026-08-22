@@ -1,7 +1,7 @@
 {
   "name": "thanh-nu-api",
-  "version": "0.5.2",
-  "description": "Thánh Nữ v0.5.2 - mapping 1 code = 1 account",
+  "version": "0.5.5",
+  "description": "Code By Thánh Nữ v0.5.5 - MM88 preset, 1-1 OCR mapping",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "local.thanhnu.api",
-    "productName": "Thánh Nữ",
+    "productName": "Code By Thánh Nữ",
     "files": [
       "main.js",
       "preload.js",
@@ -33,6 +33,6 @@
       ],
       "artifactName": "ThanhNu-${version}-portable.exe"
     },
-    "artifactName": "ThanhNu-${version}-portable.exe"
+    "artifactName": "CodeByThanhNu-${version}-portable.exe"
   }
 }

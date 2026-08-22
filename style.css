@@ -13,3 +13,8 @@ button{background:#22324d;color:var(--t);border:1px solid #365071;border-radius:
 .tablewrap{max-height:285px;overflow:auto}table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #23314b;font-size:12px;text-align:left}th{position:sticky;top:0;background:#18243b}
 pre{height:110px;overflow:auto;margin:0;background:#08101e;padding:8px;color:#5ddcff;font:11px Consolas}footer{font-size:11px;color:var(--m)}
 @media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}.cols{grid-template-columns:1fr}}
+
+.preset{display:grid;grid-template-columns:2fr .8fr 1fr .7fr;gap:8px}
+.preset>div{background:#0d1527;border:1px solid var(--line);border-radius:6px;padding:9px}
+.preset span{display:block;font-size:10px;color:var(--m);margin-bottom:4px}
+.preset b{font-size:12px;color:var(--t);word-break:break-all}

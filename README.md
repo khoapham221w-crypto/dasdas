@@ -1,56 +1,26 @@
-# THÁNH NỮ v0.5.2
+# CODE BY THÁNH NỮ v0.5.5 — MM88 PRESET
 
-- Đổi logic gửi từ **mọi acc × mọi code** sang **ghép 1-1 theo thứ tự**.
-- Ví dụ quét 5 code thì chỉ dùng 5 tài khoản đầu tiên:
-  - code 1 → acc 1
-  - code 2 → acc 2
-  - code 3 → acc 3
-- Nếu code nhiều hơn acc: phần code dư bỏ qua.
-- Nếu acc nhiều hơn code: acc dư không chạy.
-- Vẫn giữ fix OCR của v0.5.1.
+Mình rà soát lại v0.5.3 và phát hiện 2 lỗi thật, nên v0.5.4 sửa chúng:
 
-# SỬA LỖI v0.5.1
-- Sửa lỗi `ENOENT ... app.asar.unpacked/node_modules/screenshot-desktop...` khi bấm F2 trên file EXE portable.
-- Không dùng `screenshot-desktop` nữa; chuyển sang `Electron desktopCapturer`, nên không phụ thuộc file binary ngoài bị thiếu khi đóng gói.
-- Giữ nguyên F1 chọn vùng, F2 OCR và batch API-first.
+1. Danh sách đã lưu ở v0.5.3 có thể hiện `\n` thành chữ thay vì xuống dòng thật sau khi mở lại app.
+2. Bộ lọc OCR v0.5.3 vẫn cho phép chuỗi 4–12 ký tự; v0.5.4 chỉ giữ đúng **6 ký tự A-Z/0-9**.
 
-# THÁNH NỮ v0.5.1 — API-FIRST
+Sửa thêm:
+- Code dán thủ công cũng bị lọc đúng 6 ký tự trước khi chạy.
+- Crop OCR xử lý DPI tốt hơn.
+- Mapping vẫn là **1 code → 1 acc theo thứ tự**.
 
-Bản v0.5 sửa các điểm yếu của v0.4.
+MM88 preset:
+- `https://api.mm88code.com/codes/use-code-public`
+- POST / JSON
+- `username`, `code`
+- concurrency 1
 
-## Đã sửa
-- Có nút **STOP** để hủy batch đang chạy.
-- Request hỗ trợ **JSON / application/x-www-form-urlencoded / query params**.
-- Lưu **vùng OCR** sau khi tắt/mở lại tool.
-- OCR worker được warm-up khi mở app để giảm độ trễ lần F2 đầu tiên.
-- OCR chỉ chạy một lượt cho cả vùng; có chọn scale 1.0x / 1.5x / 2.0x.
-- Thử hỗ trợ chọn vùng trên màn hình nơi con trỏ đang đứng.
-- Phát hiện challenge chắc hơn:
-  - nội dung Turnstile / challenge-platform / verify-human
-  - header `cf-ray` / `server: cloudflare`
-  - kết hợp HTTP 403 / 429 / 503
-- Mặc định **dừng toàn bộ batch** khi phát hiện challenge.
-- Có progress `done/total`.
-- Có trạng thái riêng cho từng account/code.
-- Request đang chạy có thể bị Abort khi bấm STOP.
+Giới hạn:
+- Backend còn yêu cầu `captchaToken`.
+- Tool không tạo/replay/bypass Cloudflare/Turnstile token.
+- Nếu API yêu cầu verification, tool dừng và báo `CẦN XÁC MINH`.
 
-## Cấu hình request
-Tool vẫn chưa hard-code endpoint của mm88code.com.
-Cần lấy từ một request hợp lệ của chính website:
-- Request URL
-- Method
-- Body mode: JSON / Form / Query
-- Field tài khoản
-- Field code
-- Headers/cookie hợp lệ nếu website yêu cầu
-
-Không dùng CAPTCHA/Turnstile token để né xác minh.
-
-## Build
-GitHub → Actions → `Build Thánh Nữ v0.5 API Portable` → Run workflow.
-Tải artifact `ThanhNu-v05-API-Windows-Portable`.
-File EXE: `ThanhNu-0.5.0-portable.exe`.
-
-## Lưu ý OCR
-Tesseract.js vẫn là OCR portable dễ build nhất trong bản này.
-Nếu cần <1 giây ổn định trên máy net yếu, bước nâng cấp tiếp theo là thay OCR bằng engine ONNX/native.
+Build:
+GitHub → Actions → `Build Code By Thánh Nữ v0.5.5 MM88 Portable`
+Artifact: `CodeByThanhNu-v055-MM88-Windows-Portable`
