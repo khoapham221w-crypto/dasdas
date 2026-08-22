@@ -1,6 +1,6 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thánh Nữ v0.5</title><link rel="stylesheet" href="style.css"></head>
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thánh Nữ v0.5.2</title><link rel="stylesheet" href="style.css"></head>
 <body><div class="app">
-<header><div><h1>THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5 • Không cần mở Chrome</div></header>
+<header><div><h1>THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5.2 • Chế độ 1-1</div></header>
 
 <section class="card config">
 <div class="title">CẤU HÌNH REQUEST</div>
@@ -28,7 +28,7 @@
 
 <section class="cols">
 <section class="card"><div class="title">TÀI KHOẢN</div><textarea id="accounts" placeholder="Mỗi dòng 1 tài khoản"></textarea><div id="ac">0 acc</div></section>
-<section class="card"><div class="title">BATCH CODE</div>
+<section class="card"><div class="title">BATCH CODE</div><div class="mini">Chế độ hiện tại: code 1 → acc 1, code 2 → acc 2, ghép theo thứ tự.</div>
 <div class="row"><button id="pick">F1 Chọn vùng</button><button id="ocr" class="accent">F2 OCR</button><b id="ms">- ms</b></div>
 <div id="regionInfo" class="mini">Vùng OCR: chưa chọn</div>
 <textarea id="codes" placeholder="Mỗi dòng 1 code"></textarea><div id="cc">0 code</div></section>
@@ -43,7 +43,7 @@
   <span id="status">Sẵn sàng</span>
 </section>
 
-<section class="card"><div class="title">KẾT QUẢ TỪNG TÀI KHOẢN / CODE</div><div class="tablewrap"><table><thead><tr><th>Tài khoản</th><th>Code</th><th>HTTP</th><th>Trạng thái</th><th>Response</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<section class="card"><div class="title">KẾT QUẢ TỪNG CẶP TÀI KHOẢN / CODE</div><div class="tablewrap"><table><thead><tr><th>Tài khoản</th><th>Code</th><th>HTTP</th><th>Trạng thái</th><th>Response</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 <section class="card"><div class="title">LOG</div><pre id="log"></pre></section>
-<footer>Thánh Nữ v0.5 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
+<footer>Thánh Nữ v0.5.2 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
 </div><script src="renderer.js"></script></body></html>

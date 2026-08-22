@@ -1,9 +1,8 @@
 
-const {app,BrowserWindow,ipcMain,globalShortcut,screen}=require('electron');
+const {app,BrowserWindow,ipcMain,globalShortcut,screen,desktopCapturer}=require('electron');
 const path=require('path');
 const fs=require('fs');
 const axios=require('axios');
-const screenshot=require('screenshot-desktop');
 const sharp=require('sharp');
 const {createWorker}=require('tesseract.js');
 
@@ -151,16 +150,20 @@ async function sendOne(account,code){
 
 async function runBatch(accounts,codes){
   stopRequested=false;
+  const limit=Math.min(accounts.length,codes.length);
   const jobs=[];
-  for(const account of accounts){
-    for(const code of codes) jobs.push({account,code});
+  for(let i=0;i<limit;i++){
+    jobs.push({account:accounts[i],code:codes[i],index:i+1});
   }
 
   const out=[];
   let cursor=0,done=0;
   const n=Math.max(1,Math.min(20,Number(state.concurrency)||5));
   emitProgress(0,jobs.length);
-  log(`Bắt đầu ${jobs.length} request • concurrency ${n}`);
+  log(`Bắt đầu chế độ 1-1: ${jobs.length} request • concurrency ${n}`);
+  if(accounts.length!==codes.length){
+    log(`Ghép theo thứ tự 1-1 • dùng ${jobs.length} cặp đầu tiên (acc=${accounts.length}, code=${codes.length}).`);
+  }
 
   async function workerFn(){
     while(true){
@@ -175,7 +178,7 @@ async function runBatch(accounts,codes){
       emitProgress(done,jobs.length);
 
       if(r.challenge){
-        log(`Website yêu cầu xác minh tại ${j.account} / ${j.code}.`);
+        log(`Website yêu cầu xác minh tại cặp #${j.index}: ${j.account} / ${j.code}.`);
         if(state.stopOnChallenge){
           log('Đã dừng toàn bộ batch để tránh tiếp tục gửi request.');
           break;
@@ -249,35 +252,51 @@ function pickRegion(){
 }
 
 async function captureRegion(){
-  // screenshot-desktop mặc định chụp primary display. Nếu vùng thuộc display khác,
-  // thử truyền screen id; nếu backend không hỗ trợ thì fallback primary.
-  let img;
-  try{
-    if(region?.displayId!==undefined && region?.displayId!==null){
-      img=await screenshot({format:'png',screen:String(region.displayId)});
-    }
-  }catch{}
-  if(!img) img=await screenshot({format:'png'});
-  return img;
+  const displays=screen.getAllDisplays();
+  let d=displays.find(x=>String(x.id)===String(region?.displayId));
+  if(!d) d=screen.getDisplayNearestPoint({x:Math.round(region.x),y:Math.round(region.y)});
+
+  const sf=Number(d.scaleFactor)||1;
+  const targetW=Math.max(1,Math.round(d.bounds.width*sf));
+  const targetH=Math.max(1,Math.round(d.bounds.height*sf));
+
+  const sources=await desktopCapturer.getSources({
+    types:['screen'],
+    thumbnailSize:{width:targetW,height:targetH},
+    fetchWindowIcons:false
+  });
+
+  let source=sources.find(s=>String(s.display_id)===String(d.id));
+  if(!source) source=sources[0];
+  if(!source || source.thumbnail.isEmpty()) throw new Error('Không chụp được màn hình bằng Electron desktopCapturer');
+
+  const size=source.thumbnail.getSize();
+  const sx=size.width / d.bounds.width;
+  const sy=size.height / d.bounds.height;
+
+  const left=Math.max(0,Math.round((region.x-d.bounds.x)*sx));
+  const top=Math.max(0,Math.round((region.y-d.bounds.y)*sy));
+  const width=Math.max(1,Math.round(region.width*sx));
+  const height=Math.max(1,Math.round(region.height*sy));
+
+  return {
+    img:source.thumbnail.toPNG(),
+    left,top,width,height
+  };
 }
 
 async function runOcr(){
   if(!region)return{ok:false,error:'Chưa chọn vùng OCR'};
   const t0=Date.now();
-  const img=await captureRegion();
-
-  // Nếu screenshot là đúng display đang chọn thì tọa độ crop phải tương đối display.
-  const d=screen.getAllDisplays().find(x=>String(x.id)===String(region.displayId));
-  const left=Math.max(0,Math.round(region.x-(d?.bounds?.x||0)));
-  const top=Math.max(0,Math.round(region.y-(d?.bounds?.y||0)));
+  const shot=await captureRegion();
   const scale=Math.max(1,Math.min(2,Number(state.ocrScale)||1.5));
 
-  const crop=await sharp(img)
+  const crop=await sharp(shot.img)
     .extract({
-      left,
-      top,
-      width:Math.max(1,Math.round(region.width)),
-      height:Math.max(1,Math.round(region.height))
+      left:shot.left,
+      top:shot.top,
+      width:shot.width,
+      height:shot.height
     })
     .grayscale()
     .normalize()
@@ -307,7 +326,7 @@ async function runOcr(){
 function createWin(){
   win=new BrowserWindow({
     width:1300,height:860,minWidth:1080,minHeight:720,
-    title:'Thánh Nữ v0.5',
+    title:'Thánh Nữ v0.5.2',
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
   win.loadFile('renderer.html');

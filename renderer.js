@@ -98,10 +98,11 @@ $('run').onclick=async()=>{
   await api.save(c);
   $('rows').innerHTML='';
   $('bar').style.width='0';
-  $('progressText').textContent=`0/${c.accounts.length*c.batch.length}`;
-  $('status').textContent='Đang chạy nền...';
+  const totalPairs=Math.min(c.accounts.length,c.batch.length);
+  $('progressText').textContent=`0/${totalPairs}`;
+  $('status').textContent='Đang chạy nền 1-1...';
   const out=await api.run(c.accounts,c.batch);
-  $('status').textContent=`Kết thúc • ${out.length} kết quả`;
+  $('status').textContent=`Kết thúc 1-1 • ${out.length} cặp`;
 };
 
 $('stop').onclick=async()=>{

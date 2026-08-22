@@ -1,4 +1,20 @@
-# THÁNH NỮ v0.5 — API-FIRST
+# THÁNH NỮ v0.5.2
+
+- Đổi logic gửi từ **mọi acc × mọi code** sang **ghép 1-1 theo thứ tự**.
+- Ví dụ quét 5 code thì chỉ dùng 5 tài khoản đầu tiên:
+  - code 1 → acc 1
+  - code 2 → acc 2
+  - code 3 → acc 3
+- Nếu code nhiều hơn acc: phần code dư bỏ qua.
+- Nếu acc nhiều hơn code: acc dư không chạy.
+- Vẫn giữ fix OCR của v0.5.1.
+
+# SỬA LỖI v0.5.1
+- Sửa lỗi `ENOENT ... app.asar.unpacked/node_modules/screenshot-desktop...` khi bấm F2 trên file EXE portable.
+- Không dùng `screenshot-desktop` nữa; chuyển sang `Electron desktopCapturer`, nên không phụ thuộc file binary ngoài bị thiếu khi đóng gói.
+- Giữ nguyên F1 chọn vùng, F2 OCR và batch API-first.
+
+# THÁNH NỮ v0.5.1 — API-FIRST
 
 Bản v0.5 sửa các điểm yếu của v0.4.
 
