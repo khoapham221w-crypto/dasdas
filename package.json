@@ -1,0 +1,39 @@
+{
+  "name": "thanh-nu-api",
+  "version": "0.5.0",
+  "description": "Thánh Nữ v0.5 - API-first background batch requester + fast batch OCR",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "screenshot-desktop": "^1.15.0",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^5.1.1"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.thanhnu.api",
+    "productName": "Thánh Nữ",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.html",
+      "renderer.js",
+      "style.css",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "ThanhNu-${version}-portable.exe"
+    },
+    "artifactName": "ThanhNu-${version}-portable.exe"
+  }
+}

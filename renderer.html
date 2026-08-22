@@ -1,0 +1,49 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thánh Nữ v0.5</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="app">
+<header><div><h1>THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5 • Không cần mở Chrome</div></header>
+
+<section class="card config">
+<div class="title">CẤU HÌNH REQUEST</div>
+<div class="grid4">
+<label>Endpoint<input id="endpoint" placeholder="https://.../api/..."></label>
+<label>Method<select id="method"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option></select></label>
+<label>Body<select id="bodyMode"><option value="json">JSON</option><option value="form">Form URL Encoded</option><option value="query">Query Params</option></select></label>
+<label>Concurrency<input id="conc" type="number" min="1" max="20" value="5"></label>
+
+<label>Field tài khoản<input id="uf" value="username"></label>
+<label>Field code<input id="cf" value="code"></label>
+<label>Timeout ms<input id="timeout" type="number" value="10000"></label>
+<label>OCR scale<select id="ocrScale"><option value="1">1.0x nhanh</option><option value="1.5" selected>1.5x</option><option value="2">2.0x rõ hơn</option></select></label>
+</div>
+
+<label>Headers JSON<textarea id="headers" class="small"></textarea></label>
+<label>Extra body JSON<textarea id="extra" class="small"></textarea></label>
+
+<div class="row">
+  <label class="check"><input id="stopChallenge" type="checkbox" checked> Dừng toàn bộ batch khi gặp Cloudflare/Turnstile/challenge</label>
+</div>
+<div class="row"><button id="save">💾 Lưu cấu hình</button><button id="test">🧪 Test 1 request</button></div>
+<div class="warn">Có thể dùng cookie/session hợp lệ trong Headers nếu trang yêu cầu. Không dùng token CAPTCHA/Turnstile để né xác minh.</div>
+</section>
+
+<section class="cols">
+<section class="card"><div class="title">TÀI KHOẢN</div><textarea id="accounts" placeholder="Mỗi dòng 1 tài khoản"></textarea><div id="ac">0 acc</div></section>
+<section class="card"><div class="title">BATCH CODE</div>
+<div class="row"><button id="pick">F1 Chọn vùng</button><button id="ocr" class="accent">F2 OCR</button><b id="ms">- ms</b></div>
+<div id="regionInfo" class="mini">Vùng OCR: chưa chọn</div>
+<textarea id="codes" placeholder="Mỗi dòng 1 code"></textarea><div id="cc">0 code</div></section>
+</section>
+
+<section class="card actions">
+  <button id="run" class="green">▶ CHẠY NGẦM TẤT CẢ</button>
+  <button id="stop" class="stop">■ STOP</button>
+  <button id="clear">Xóa kết quả</button>
+  <div class="progress"><div id="bar"></div></div>
+  <span id="progressText">0/0</span>
+  <span id="status">Sẵn sàng</span>
+</section>
+
+<section class="card"><div class="title">KẾT QUẢ TỪNG TÀI KHOẢN / CODE</div><div class="tablewrap"><table><thead><tr><th>Tài khoản</th><th>Code</th><th>HTTP</th><th>Trạng thái</th><th>Response</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<section class="card"><div class="title">LOG</div><pre id="log"></pre></section>
+<footer>Thánh Nữ v0.5 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
+</div><script src="renderer.js"></script></body></html>
