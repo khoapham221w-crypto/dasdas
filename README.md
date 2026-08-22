@@ -1,28 +1,36 @@
-# CODE BY THÁNH NỮ v0.5.7 — F2 AUTO + MM88 VERIFY
+# CODE BY THÁNH NỮ v0.5.9 — AUDIT FIX
 
-## Luồng hoạt động
-- **F1**: chọn vùng OCR.
-- **F2**: OCR vùng đã chọn → lấy code → tự chạy ngay, không cần bấm nút Chạy.
-- Mapping giữ nguyên **code 1 → acc 1, code 2 → acc 2...**
-- Các cặp hợp lệ được khởi chạy song song.
-- Nếu số tài khoản và code lệch nhau, chỉ dùng `min(acc, code)` cặp đầu tiên.
-- OCR chỉ giữ code đúng **6 ký tự A-Z/0-9**.
+## Luồng chính
+- F1: tool tạm ẩn rồi cho chọn vùng OCR.
+- F2: tool tạm ẩn → chụp vùng → OCR → tự chạy batch ngay.
+- Mapping giữ đúng thứ tự: code 1 → acc 1, code 2 → acc 2...
+- OCR chỉ lấy mã đúng 6 ký tự A-Z/0-9.
+- Không tự sửa O/0 hoặc I/1.
+- Các phiên MM88 được khởi chạy song song.
+- Phiên nào Turnstile tự xác minh hợp lệ thì tiếp tục ngay.
+- Nếu nhiều phiên cùng cần thao tác người dùng, cửa sổ xác minh được hiện lần lượt để không tranh focus.
 
-## Xác minh MM88 / Turnstile
-- Mỗi cặp chạy trên **trang MM88 thật** trong Chromium của Electron.
-- Tool tự điền tài khoản và code.
-- Turnstile được để chạy theo cơ chế bình thường của website.
-- Nếu Turnstile tự xác minh thành công, tool tự bấm gửi và tiếp tục ngầm.
-- Nếu Turnstile yêu cầu thao tác người dùng, cửa sổ MM88 của cặp đó sẽ hiện ra. Sau khi bạn xác minh hợp lệ, tool tự bấm gửi và đóng cửa sổ khi có kết quả.
-- Tool **không tạo, lấy ra, replay hoặc bypass `captchaToken`**.
-- **STOP** đóng toàn bộ cửa sổ xác minh đang chạy.
+## Fix audit
+- Khóa OCR: bấm F2 liên tục không tạo nhiều OCR chồng nhau.
+- Khóa khởi tạo Tesseract worker: warm-up và F2 không tạo 2 worker cùng lúc.
+- Chặn F1/F2 khi batch cũ vẫn đang chạy.
+- Clamp vùng crop theo kích thước screenshot thật, tránh lỗi extract ở Windows scaling 125%/150%.
+- Không âm thầm chụp nhầm monitor nếu Electron không map được display_id.
+- F1 luôn hiện lại cửa sổ tool nếu overlay lỗi.
+- Giữ code OCR theo đúng thứ tự, không dedupe làm dịch mapping.
+- Các cửa sổ cần xác minh tay không còn cùng lúc giành focus.
+- Giao diện ghi đúng là gửi qua trang MM88, không gây hiểu nhầm là API thuần.
+- Pin version dependency để build GitHub ổn định hơn.
+- Sửa các tên artifact/version bị sót từ bản trước.
 
-## Lưu ý
-Website có thể giới hạn tốc độ. Khởi chạy nhiều cặp cùng lúc vẫn có thể nhận `RATE_LIMIT_EXCEEDED`; việc xác minh hợp lệ không loại bỏ rate-limit của server.
+## Turnstile
+Tool chỉ để Turnstile chạy theo cơ chế bình thường trên trang MM88. Tool không tạo, replay hoặc bypass captchaToken.
 
 ## Build
-GitHub → Actions → `Build Code By Thánh Nữ v0.5.7 MM88 Portable`
+GitHub → Actions → `Build Code By Thánh Nữ v0.5.9 MM88 Portable`
 
-Artifact: `CodeByThanhNu-v057-MM88-Windows-Portable`
+Artifact:
+`CodeByThanhNu-v059-MM88-Windows-Portable`
 
-EXE: `CodeByThanhNu-0.5.7-portable.exe`
+EXE:
+`CodeByThanhNu-0.5.9-portable.exe`

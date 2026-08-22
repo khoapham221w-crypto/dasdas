@@ -5,8 +5,12 @@ const fs=require('fs');
 const sharp=require('sharp');
 const {createWorker}=require('tesseract.js');
 
-let win=null,overlay=null,ocrWorker=null,region=null;
+let win=null,overlay=null,ocrWorker=null,ocrWorkerPromise=null,region=null;
 let stopRequested=false;
+let mainHiddenForCapture=false;
+let ocrBusy=false;
+let batchInProgress=false;
+let manualVerifyTail=Promise.resolve();
 const activeVerifyWindows=new Set();
 
 const dir=path.join(app.getPath('userData'),'thanhnu-api');
@@ -41,7 +45,7 @@ function load(){
       state={...state,...JSON.parse(fs.readFileSync(file,'utf8'))};
     }
   }catch{}
-  // MM88 preset locked in v0.5.3
+  // MM88 preset
   state.endpoint='https://api.mm88code.com/codes/use-code-public';
   state.method='POST';
   state.bodyMode='json';
@@ -87,8 +91,10 @@ async function pageState(bw){
       const all=[...document.querySelectorAll('input,textarea')].filter(vis);
       const textInputs=all.filter(e=>!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));
       const lower=e=>((e.name||'')+' '+(e.id||'')+' '+(e.placeholder||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();
-      const user=textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
-      const code=textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
+      const user=document.querySelector('input[name="username"],textarea[name="username"],#username')
+        ||textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
+      const code=document.querySelector('input[name="code"],textarea[name="code"],#code')
+        ||textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
       const ts=document.querySelector('input[name="cf-turnstile-response"],textarea[name="cf-turnstile-response"]');
       const verified=!!ts && String(ts.value||'').length>20;
       const hasTurnstile=!!document.querySelector('.cf-turnstile,iframe[src*="challenges.cloudflare.com"],iframe[title*="Cloudflare" i]');
@@ -107,8 +113,10 @@ async function fillPair(bw,account,code){
       const all=[...document.querySelectorAll('input,textarea')].filter(vis);
       const textInputs=all.filter(e=>!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));
       const lower=e=>((e.name||'')+' '+(e.id||'')+' '+(e.placeholder||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();
-      const user=textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
-      const codeEl=textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
+      const user=document.querySelector('input[name="username"],textarea[name="username"],#username')
+        ||textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
+      const codeEl=document.querySelector('input[name="code"],textarea[name="code"],#code')
+        ||textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
       const set=(el,val)=>{
         if(!el)return;
         const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
@@ -158,8 +166,8 @@ async function waitForForm(bw,timeout=15000){
 }
 
 async function waitForVerificationOrShow(bw,account,code,index){
-  // Turnstile is allowed to run normally inside the real page. We never read,
-  // export, replay, generate, or submit its token ourselves.
+  // Turnstile runs normally inside the real MM88 page. The tool does not
+  // export, replay, generate, or submit the token outside that page.
   const autoUntil=Date.now()+6500;
   while(Date.now()<autoUntil && !stopRequested && !bw.isDestroyed()){
     const st=await pageState(bw);
@@ -168,24 +176,40 @@ async function waitForVerificationOrShow(bw,account,code,index){
   }
   if(stopRequested || bw.isDestroyed())return{verified:false,stopped:true};
 
-  log(`Cặp #${index} cần xác minh trực tiếp trên MM88: ${account} / ${code}.`);
-  try{
-    bw.show();
-    bw.focus();
-    bw.setAlwaysOnTop(true,'floating');
-    setTimeout(()=>{try{if(!bw.isDestroyed())bw.setAlwaysOnTop(false)}catch{}},1200);
-  }catch{}
+  // All sessions remain active in parallel. Only sessions that actually need
+  // a human interaction are presented one-by-one to avoid focus fighting.
+  let releaseTurn;
+  const previousTurn=manualVerifyTail;
+  manualVerifyTail=new Promise(r=>{releaseTurn=r});
+  await previousTurn;
 
-  const manualUntil=Date.now()+120000;
-  while(Date.now()<manualUntil && !stopRequested && !bw.isDestroyed()){
-    const st=await pageState(bw);
-    if(st.verified){
-      try{bw.hide()}catch{}
-      return{verified:true,manual:true};
+  try{
+    if(stopRequested || bw.isDestroyed())return{verified:false,stopped:true};
+
+    const recheck=await pageState(bw);
+    if(recheck.verified)return{verified:true,manual:false};
+
+    log(`Cặp #${index} cần xác minh trực tiếp trên MM88: ${account} / ${code}.`);
+    try{
+      bw.show();
+      bw.focus();
+      bw.setAlwaysOnTop(true,'floating');
+      setTimeout(()=>{try{if(!bw.isDestroyed())bw.setAlwaysOnTop(false)}catch{}},1200);
+    }catch{}
+
+    const manualUntil=Date.now()+120000;
+    while(Date.now()<manualUntil && !stopRequested && !bw.isDestroyed()){
+      const st=await pageState(bw);
+      if(st.verified){
+        try{bw.hide()}catch{}
+        return{verified:true,manual:true};
+      }
+      await sleep(250);
     }
-    await sleep(250);
+    return{verified:false,timeout:!stopRequested};
+  }finally{
+    try{releaseTurn()}catch{}
   }
-  return{verified:false,timeout:!stopRequested};
 }
 
 async function waitForResult(bw,timeout=12000){
@@ -243,6 +267,8 @@ async function sendOne(account,code,index=1){
 }
 
 async function runBatch(accounts,codes){
+  if(batchInProgress)throw new Error('Batch trước vẫn đang chạy');
+  batchInProgress=true;
   stopRequested=false;
   accounts=(accounts||[]).map(x=>String(x).trim()).filter(Boolean);
   codes=(codes||[]).map(x=>String(x).trim().toUpperCase()).filter(x=>/^[A-Z0-9]{6}$/.test(x));
@@ -256,22 +282,26 @@ async function runBatch(accounts,codes){
   log(`F2 batch: mở ${jobs.length} phiên MM88 song song; Turnstile chạy theo luồng xác minh bình thường của trang.`);
   if(accounts.length!==codes.length)log(`Ghép 1-1 theo thứ tự • dùng ${jobs.length} cặp (acc=${accounts.length}, code=${codes.length}).`);
 
-  await Promise.all(jobs.map(async(j,idx)=>{
-    if(stopRequested){
-      out[idx]={account:j.account,code:j.code,ok:false,status:'ĐÃ DỪNG'};
-    }else{
-      out[idx]=await sendOne(j.account,j.code,j.index);
-    }
-    done++;
-    win?.webContents.send('result',out[idx]);
-    emitProgress(done,jobs.length);
-  }));
+  try{
+    await Promise.all(jobs.map(async(j,idx)=>{
+      if(stopRequested){
+        out[idx]={account:j.account,code:j.code,ok:false,status:'ĐÃ DỪNG'};
+      }else{
+        out[idx]=await sendOne(j.account,j.code,j.index);
+      }
+      done++;
+      win?.webContents.send('result',out[idx]);
+      emitProgress(done,jobs.length);
+    }));
 
-  state.results=out.filter(Boolean);
-  state.updatedAt=Date.now();
-  save();
-  log(stopRequested?`Đã dừng • ${done}/${jobs.length}`:`Hoàn thành ${done}/${jobs.length}`);
-  return state.results;
+    state.results=out.filter(Boolean);
+    state.updatedAt=Date.now();
+    save();
+    log(stopRequested?`Đã dừng • ${done}/${jobs.length}`:`Hoàn thành ${done}/${jobs.length}`);
+    return state.results;
+  }finally{
+    batchInProgress=false;
+  }
 }
 
 async function stopBatch(){
@@ -283,51 +313,114 @@ async function stopBatch(){
 
 async function getOcr(){
   if(ocrWorker)return ocrWorker;
-  log('Khởi tạo OCR local...');
-  ocrWorker=await createWorker('eng');
-  await ocrWorker.setParameters({
-    tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-    tessedit_pageseg_mode:'11',
-    preserve_interword_spaces:'1',
-    user_defined_dpi:'150'
-  });
-  log('OCR sẵn sàng.');
-  return ocrWorker;
+  if(ocrWorkerPromise)return ocrWorkerPromise;
+
+  ocrWorkerPromise=(async()=>{
+    log('Khởi tạo OCR local...');
+    const worker=await createWorker('eng');
+    await worker.setParameters({
+      tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+      tessedit_pageseg_mode:'11',
+      preserve_interword_spaces:'1',
+      user_defined_dpi:'150'
+    });
+    ocrWorker=worker;
+    log('OCR sẵn sàng.');
+    return worker;
+  })();
+
+  try{
+    return await ocrWorkerPromise;
+  }finally{
+    ocrWorkerPromise=null;
+  }
 }
 
-function pickRegion(){
-  if(overlay){overlay.focus();return}
-  const d=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  overlay=new BrowserWindow({
-    x:d.bounds.x,y:d.bounds.y,width:d.bounds.width,height:d.bounds.height,
-    transparent:true,frame:false,alwaysOnTop:true,skipTaskbar:true,resizable:false,
-    webPreferences:{nodeIntegration:true,contextIsolation:false}
-  });
-  const ox=d.bounds.x,oy=d.bounds.y;
-  const html=`<body style="margin:0;background:rgba(0,0,0,.25);cursor:crosshair;overflow:hidden">
-  <div style="position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font:700 16px Segoe UI">Kéo chuột khoanh vùng chứa nhiều code • ESC để hủy</div>
-  <div id=b style="position:absolute;border:3px solid #22d3ee;background:rgba(34,211,238,.12);display:none"></div>
-  <script>
-  const{ipcRenderer}=require('electron');
-  const OX=${ox},OY=${oy};
-  let sx=0,sy=0,on=false,b=document.getElementById('b');
-  onmousedown=e=>{on=true;sx=e.clientX;sy=e.clientY;b.style.display='block'};
-  onmousemove=e=>{
-    if(!on)return;
-    let x=Math.min(sx,e.clientX),y=Math.min(sy,e.clientY),w=Math.abs(e.clientX-sx),h=Math.abs(e.clientY-sy);
-    Object.assign(b.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'})
-  };
-  onmouseup=e=>{
-    if(!on)return;on=false;
-    let x=Math.min(sx,e.clientX),y=Math.min(sy,e.clientY),width=Math.abs(e.clientX-sx),height=Math.abs(e.clientY-sy);
-    if(width>20&&height>20)ipcRenderer.send('region-picked',{x:x+OX,y:y+OY,width,height,displayId:${JSON.stringify(d.id)}})
-  };
-  onkeydown=e=>{if(e.key==='Escape')ipcRenderer.send('region-cancel')};
-  </script>`;
-  overlay.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));
-  overlay.on('closed',()=>overlay=null);
+
+async function hideMainForCapture(delayMs=140){
+  if(!win || win.isDestroyed())return false;
+  try{
+    const wasVisible=win.isVisible();
+    if(wasVisible){
+      mainHiddenForCapture=true;
+      win.hide();
+      await sleep(delayMs);
+    }
+    return wasVisible;
+  }catch{
+    return false;
+  }
 }
 
+function restoreMainAfterCapture(){
+  if(!mainHiddenForCapture || !win || win.isDestroyed())return;
+  try{
+    mainHiddenForCapture=false;
+    win.show();
+    win.focus();
+  }catch{}
+}
+
+async function pickRegion(){
+  if(batchInProgress){
+    log('F1 bị bỏ qua vì batch đang chạy. Bấm STOP hoặc chờ batch kết thúc.');
+    return false;
+  }
+  if(ocrBusy){
+    log('F1 bị bỏ qua vì OCR đang chạy.');
+    return false;
+  }
+  if(overlay){
+    try{overlay.focus()}catch{}
+    return true;
+  }
+
+  await hideMainForCapture(140);
+  try{
+    const d=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    overlay=new BrowserWindow({
+      x:d.bounds.x,y:d.bounds.y,width:d.bounds.width,height:d.bounds.height,
+      transparent:true,frame:false,alwaysOnTop:true,skipTaskbar:true,resizable:false,
+      webPreferences:{nodeIntegration:true,contextIsolation:false}
+    });
+
+    overlay.on('closed',()=>{
+      overlay=null;
+      setTimeout(()=>restoreMainAfterCapture(),80);
+    });
+
+    const ox=d.bounds.x,oy=d.bounds.y;
+    const html=`<body style="margin:0;background:rgba(0,0,0,.25);cursor:crosshair;overflow:hidden">
+    <div style="position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font:700 16px Segoe UI">Kéo chuột khoanh vùng chứa nhiều code • ESC để hủy</div>
+    <div id=b style="position:absolute;border:3px solid #22d3ee;background:rgba(34,211,238,.12);display:none"></div>
+    <script>
+    const{ipcRenderer}=require('electron');
+    const OX=${ox},OY=${oy};
+    let sx=0,sy=0,on=false,b=document.getElementById('b');
+    onmousedown=e=>{on=true;sx=e.clientX;sy=e.clientY;b.style.display='block'};
+    onmousemove=e=>{
+      if(!on)return;
+      let x=Math.min(sx,e.clientX),y=Math.min(sy,e.clientY),w=Math.abs(e.clientX-sx),h=Math.abs(e.clientY-sy);
+      Object.assign(b.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'})
+    };
+    onmouseup=e=>{
+      if(!on)return;on=false;
+      let x=Math.min(sx,e.clientX),y=Math.min(sy,e.clientY),width=Math.abs(e.clientX-sx),height=Math.abs(e.clientY-sy);
+      if(width>20&&height>20)ipcRenderer.send('region-picked',{x:x+OX,y:y+OY,width,height,displayId:${JSON.stringify(d.id)}})
+    };
+    onkeydown=e=>{if(e.key==='Escape')ipcRenderer.send('region-cancel')};
+    </script>`;
+
+    await overlay.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));
+    return true;
+  }catch(e){
+    log('Không mở được lớp chọn vùng OCR: '+e.message);
+    try{if(overlay && !overlay.isDestroyed())overlay.destroy()}catch{}
+    overlay=null;
+    restoreMainAfterCapture();
+    return false;
+  }
+}
 async function captureRegion(){
   const displays=screen.getAllDisplays();
   let d=displays.find(x=>String(x.id)===String(region?.displayId));
@@ -344,17 +437,27 @@ async function captureRegion(){
   });
 
   let source=sources.find(s=>String(s.display_id)===String(d.id));
-  if(!source) source=sources[0];
-  if(!source || source.thumbnail.isEmpty()) throw new Error('Không chụp được màn hình bằng Electron desktopCapturer');
+  if(!source && sources.length===1)source=sources[0];
+  if(!source){
+    throw new Error('Không xác định được đúng màn hình OCR. Hãy bấm F1 và chọn lại vùng trên màn hình cần quét.');
+  }
+  if(source.thumbnail.isEmpty())throw new Error('Không chụp được màn hình bằng Electron desktopCapturer');
 
   const size=source.thumbnail.getSize();
   const sx=size.width / d.bounds.width;
   const sy=size.height / d.bounds.height;
 
-  const left=Math.max(0,Math.round((region.x-d.bounds.x)*sx));
-  const top=Math.max(0,Math.round((region.y-d.bounds.y)*sy));
-  const width=Math.max(1,Math.round(region.width*sx));
-  const height=Math.max(1,Math.round(region.height*sy));
+  let left=Math.round((region.x-d.bounds.x)*sx);
+  let top=Math.round((region.y-d.bounds.y)*sy);
+  left=Math.max(0,Math.min(size.width-1,left));
+  top=Math.max(0,Math.min(size.height-1,top));
+
+  let width=Math.max(1,Math.round(region.width*sx));
+  let height=Math.max(1,Math.round(region.height*sy));
+  width=Math.min(width,size.width-left);
+  height=Math.min(height,size.height-top);
+
+  if(width<2 || height<2)throw new Error('Vùng OCR nằm ngoài màn hình. Hãy bấm F1 chọn lại vùng.');
 
   return {
     img:source.thumbnail.toPNG(),
@@ -363,9 +466,25 @@ async function captureRegion(){
 }
 
 async function runOcr(){
+  if(batchInProgress)return{ok:false,error:'Batch trước đang chạy. Bấm STOP hoặc chờ xong rồi F2 lại.'};
+  if(ocrBusy)return{ok:false,error:'OCR đang chạy, bỏ qua lần F2 này.'};
   if(!region)return{ok:false,error:'Chưa chọn vùng OCR'};
+
+  ocrBusy=true;
   const t0=Date.now();
-  const shot=await captureRegion();
+
+  try{
+  // Quan trọng: desktopCapturer chụp đúng những gì đang hiển thị trên màn hình.
+  // Nếu cửa sổ tool đang đè lên vùng OCR thì OCR sẽ đọc chính giao diện tool.
+  // Vì vậy tạm ẩn tool trước khi chụp, rồi hiện lại ngay sau khi có screenshot.
+  const wasVisible=await hideMainForCapture(140);
+  let shot;
+  try{
+    shot=await captureRegion();
+  }finally{
+    if(wasVisible)restoreMainAfterCapture();
+  }
+
   const scale=Math.max(1,Math.min(2,Number(state.ocrScale)||1.5));
 
   const crop=await sharp(shot.img)
@@ -390,7 +509,6 @@ async function runOcr(){
     .filter(x=>x.length===6);
 
   if(!codes.length) codes=raw.match(/\b[A-Z0-9]{6}\b/g)||[];
-  codes=[...new Set(codes)];
 
   state.batch=codes;
   state.updatedAt=Date.now();
@@ -398,12 +516,15 @@ async function runOcr(){
   save();
 
   return{ok:true,codes,ms:Date.now()-t0,raw};
+  }finally{
+    ocrBusy=false;
+  }
 }
 
 function createWin(){
   win=new BrowserWindow({
     width:1300,height:860,minWidth:1080,minHeight:720,
-    title:'Code By Thánh Nữ v0.5.7',
+    title:'Code By Thánh Nữ v0.5.9',
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
   win.loadFile('renderer.html');
@@ -412,12 +533,18 @@ function createWin(){
 app.whenReady().then(async()=>{
   load();
   createWin();
-  globalShortcut.register('F1',pickRegion);
-  globalShortcut.register('F2',async()=>{
+
+  const f1ok=globalShortcut.register('F1',pickRegion);
+  const f2ok=globalShortcut.register('F2',async()=>{
     const r=await runOcr().catch(e=>({ok:false,error:e.message}));
     win?.webContents.send('ocr',r);
   });
-  // Warm OCR in background so first F2 is less painful.
+
+  win.webContents.once('did-finish-load',()=>{
+    if(!f1ok)log('Không đăng ký được phím F1. Có ứng dụng khác đang chiếm phím.');
+    if(!f2ok)log('Không đăng ký được phím F2. Có ứng dụng khác đang chiếm phím.');
+  });
+
   setTimeout(()=>getOcr().catch(e=>log('OCR init lỗi: '+e.message)),500);
 });
 
@@ -432,9 +559,13 @@ ipcMain.on('region-picked',(_,r)=>{
   state.ocrRegion=r;
   save();
   if(overlay)overlay.close();
+  else restoreMainAfterCapture();
   win?.webContents.send('region',r);
 });
-ipcMain.on('region-cancel',()=>{if(overlay)overlay.close()});
+ipcMain.on('region-cancel',()=>{
+  if(overlay)overlay.close();
+  else restoreMainAfterCapture();
+});
 
 ipcMain.handle('state',()=>({...state,region}));
 ipcMain.handle('save',(_,x)=>{
@@ -443,7 +574,7 @@ ipcMain.handle('save',(_,x)=>{
   save();
   return{ok:true};
 });
-ipcMain.handle('pick',()=>{pickRegion();return true});
+ipcMain.handle('pick',()=>pickRegion());
 ipcMain.handle('ocr',()=>runOcr().catch(e=>({ok:false,error:e.message})));
 ipcMain.handle('run',(_,accounts,codes)=>runBatch(accounts,codes));
 ipcMain.handle('stop',()=>stopBatch());

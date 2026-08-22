@@ -89,7 +89,7 @@ async function startBatch(source='F2'){
 }
 
 async function showOcr(r,autoRun=true){
-  if(!r?.ok){log('OCR lỗi: '+(r?.error||''));return}
+  if(!r?.ok){$('status').textContent=r?.error||'OCR lỗi';log('OCR lỗi: '+(r?.error||''));return}
   $('codes').value=(r.codes||[]).join('\n');
   $('ms').textContent=r.ms+' ms';
   counts();

@@ -1,19 +1,19 @@
 {
   "name": "thanh-nu-api",
-  "version": "0.5.7",
-  "description": "Code By Thánh Nữ v0.5.7 - F2 OCR auto-run with normal MM88 Turnstile browser verification",
+  "version": "0.5.9",
+  "description": "Code By Thánh Nữ v0.5.9 - OCR/batch race guards, robust capture bounds, stable manual verification UI",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win portable"
   },
   "dependencies": {
-    "sharp": "^0.33.5",
-    "tesseract.js": "^5.1.1"
+    "sharp": "0.33.5",
+    "tesseract.js": "5.1.1"
   },
   "devDependencies": {
-    "electron": "^31.7.7",
-    "electron-builder": "^25.1.8"
+    "electron": "31.7.7",
+    "electron-builder": "25.1.8"
   },
   "build": {
     "appId": "local.thanhnu.api",
