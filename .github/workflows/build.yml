@@ -1,4 +1,4 @@
-name: Build Code By Thánh Nữ v0.5.6 API Portable
+name: Build Code By Thánh Nữ v2.0 API Portable
 
 on:
   workflow_dispatch:
