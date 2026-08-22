@@ -1,26 +1,28 @@
-# CODE BY THÁNH NỮ v0.5.5 — MM88 PRESET
+# CODE BY THÁNH NỮ v0.5.7 — F2 AUTO + MM88 VERIFY
 
-Mình rà soát lại v0.5.3 và phát hiện 2 lỗi thật, nên v0.5.4 sửa chúng:
+## Luồng hoạt động
+- **F1**: chọn vùng OCR.
+- **F2**: OCR vùng đã chọn → lấy code → tự chạy ngay, không cần bấm nút Chạy.
+- Mapping giữ nguyên **code 1 → acc 1, code 2 → acc 2...**
+- Các cặp hợp lệ được khởi chạy song song.
+- Nếu số tài khoản và code lệch nhau, chỉ dùng `min(acc, code)` cặp đầu tiên.
+- OCR chỉ giữ code đúng **6 ký tự A-Z/0-9**.
 
-1. Danh sách đã lưu ở v0.5.3 có thể hiện `\n` thành chữ thay vì xuống dòng thật sau khi mở lại app.
-2. Bộ lọc OCR v0.5.3 vẫn cho phép chuỗi 4–12 ký tự; v0.5.4 chỉ giữ đúng **6 ký tự A-Z/0-9**.
+## Xác minh MM88 / Turnstile
+- Mỗi cặp chạy trên **trang MM88 thật** trong Chromium của Electron.
+- Tool tự điền tài khoản và code.
+- Turnstile được để chạy theo cơ chế bình thường của website.
+- Nếu Turnstile tự xác minh thành công, tool tự bấm gửi và tiếp tục ngầm.
+- Nếu Turnstile yêu cầu thao tác người dùng, cửa sổ MM88 của cặp đó sẽ hiện ra. Sau khi bạn xác minh hợp lệ, tool tự bấm gửi và đóng cửa sổ khi có kết quả.
+- Tool **không tạo, lấy ra, replay hoặc bypass `captchaToken`**.
+- **STOP** đóng toàn bộ cửa sổ xác minh đang chạy.
 
-Sửa thêm:
-- Code dán thủ công cũng bị lọc đúng 6 ký tự trước khi chạy.
-- Crop OCR xử lý DPI tốt hơn.
-- Mapping vẫn là **1 code → 1 acc theo thứ tự**.
+## Lưu ý
+Website có thể giới hạn tốc độ. Khởi chạy nhiều cặp cùng lúc vẫn có thể nhận `RATE_LIMIT_EXCEEDED`; việc xác minh hợp lệ không loại bỏ rate-limit của server.
 
-MM88 preset:
-- `https://api.mm88code.com/codes/use-code-public`
-- POST / JSON
-- `username`, `code`
-- concurrency 1
+## Build
+GitHub → Actions → `Build Code By Thánh Nữ v0.5.7 MM88 Portable`
 
-Giới hạn:
-- Backend còn yêu cầu `captchaToken`.
-- Tool không tạo/replay/bypass Cloudflare/Turnstile token.
-- Nếu API yêu cầu verification, tool dừng và báo `CẦN XÁC MINH`.
+Artifact: `CodeByThanhNu-v057-MM88-Windows-Portable`
 
-Build:
-GitHub → Actions → `Build Code By Thánh Nữ v0.5.5 MM88 Portable`
-Artifact: `CodeByThanhNu-v055-MM88-Windows-Portable`
+EXE: `CodeByThanhNu-0.5.7-portable.exe`

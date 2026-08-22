@@ -1,6 +1,6 @@
-
 const $=x=>document.getElementById(x);
 const lines=t=>t.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+let batchRunning=false;
 
 function counts(){
   $('ac').textContent=lines($('accounts').value).length+' acc';
@@ -23,33 +23,15 @@ function cfg(){
     codeField:'code',
     headers:{'content-type':'application/json','accept':'application/json'},
     extraBody:{},
-    concurrency:1,
     timeoutMs:10000,
-    stopOnChallenge:true,
+    stopOnChallenge:false,
     ocrScale:1,
     accounts:lines($('accounts').value),
     batch:lines($('codes').value).map(x=>x.toUpperCase()).filter(x=>/^[A-Z0-9]{6}$/.test(x))
   };
 }
 
-
 $('pick').onclick=()=>api.pick();
-
-function showOcr(r){
-  if(!r?.ok){log('OCR lỗi: '+(r?.error||''));return}
-  $('codes').value=(r.codes||[]).join('\n');
-  $('ms').textContent=r.ms+' ms';
-  counts();
-  log(`OCR ${r.codes.length} code trong ${r.ms} ms`);
-}
-$('ocr').onclick=async()=>showOcr(await api.ocr());
-api.onOcr(showOcr);
-
-api.onRegion(r=>{
-  $('regionInfo').textContent=`Vùng OCR: x=${r.x}, y=${r.y}, w=${r.width}, h=${r.height}`;
-  log(`Đã lưu vùng OCR x=${r.x}, y=${r.y}, w=${r.width}, h=${r.height}`);
-});
-api.onLog(log);
 
 function safe(s){return String(s??'').replace(/[<>&]/g,'')}
 function addResult(r){
@@ -67,31 +49,75 @@ api.onProgress(p=>{
   if(p.stopped)$('status').textContent='Đang dừng...';
 });
 
-$('clear').onclick=()=>{
-  $('rows').innerHTML='';
-  $('log').textContent='';
-  $('bar').style.width='0';
-  $('progressText').textContent='0/0';
-};
-
-
-$('run').onclick=async()=>{
+async function startBatch(source='F2'){
+  if(batchRunning){
+    log(`${source}: batch trước vẫn đang chạy, bỏ qua lần kích hoạt này.`);
+    return;
+  }
   const c=cfg();
-  if(!c.accounts.length||!c.batch.length){$('status').textContent='Cần tài khoản và code 6 ký tự';return}
+  if(!c.accounts.length||!c.batch.length){
+    $('status').textContent='Cần tài khoản và code 6 ký tự';
+    log(`${source}: chưa đủ tài khoản hoặc code hợp lệ.`);
+    return;
+  }
+
   const rawCodeCount=lines($('codes').value).length;
   if(c.batch.length!==rawCodeCount){
     log(`Đã bỏ ${rawCodeCount-c.batch.length} dòng code không đúng 6 ký tự.`);
     $('codes').value=c.batch.join('\n');
     counts();
   }
+
   await api.save(c);
   $('rows').innerHTML='';
   $('bar').style.width='0';
   const totalPairs=Math.min(c.accounts.length,c.batch.length);
   $('progressText').textContent=`0/${totalPairs}`;
-  $('status').textContent='Đang chạy nền 1-1...';
-  const out=await api.run(c.accounts,c.batch);
-  $('status').textContent=`Kết thúc 1-1 • ${out.length} cặp`;
+  $('status').textContent=`${source}: đang mở ${totalPairs} phiên MM88...`;
+  log(`${source}: OCR xong → tự chạy ${totalPairs} cặp 1-1. Turnstile chạy trực tiếp trên trang MM88; nếu cần thao tác, cửa sổ xác minh sẽ hiện.`);
+
+  batchRunning=true;
+  try{
+    const out=await api.run(c.accounts,c.batch);
+    $('status').textContent=`Kết thúc • ${out.length}/${totalPairs} cặp`;
+  }catch(e){
+    $('status').textContent='Lỗi batch';
+    log('Lỗi batch: '+(e?.message||e));
+  }finally{
+    batchRunning=false;
+  }
+}
+
+async function showOcr(r,autoRun=true){
+  if(!r?.ok){log('OCR lỗi: '+(r?.error||''));return}
+  $('codes').value=(r.codes||[]).join('\n');
+  $('ms').textContent=r.ms+' ms';
+  counts();
+  log(`OCR ${r.codes.length} code trong ${r.ms} ms`);
+  if(autoRun){
+    if(!r.codes?.length){
+      $('status').textContent='OCR không thấy code';
+      return;
+    }
+    await startBatch('F2');
+  }
+}
+
+// Nút OCR và phím F2 đều: OCR xong tự chạy ngay.
+$('ocr').onclick=async()=>showOcr(await api.ocr(),true);
+api.onOcr(r=>showOcr(r,true));
+
+api.onRegion(r=>{
+  $('regionInfo').textContent=`Vùng OCR: x=${r.x}, y=${r.y}, w=${r.width}, h=${r.height}`;
+  log(`Đã lưu vùng OCR x=${r.x}, y=${r.y}, w=${r.width}, h=${r.height}`);
+});
+api.onLog(log);
+
+$('clear').onclick=()=>{
+  $('rows').innerHTML='';
+  $('log').textContent='';
+  $('bar').style.width='0';
+  $('progressText').textContent='0/0';
 };
 
 $('stop').onclick=async()=>{

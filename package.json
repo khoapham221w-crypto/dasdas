@@ -1,14 +1,13 @@
 {
   "name": "thanh-nu-api",
-  "version": "0.5.5",
-  "description": "Code By Thánh Nữ v0.5.5 - MM88 preset, 1-1 OCR mapping",
+  "version": "0.5.7",
+  "description": "Code By Thánh Nữ v0.5.7 - F2 OCR auto-run with normal MM88 Turnstile browser verification",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win portable"
   },
   "dependencies": {
-    "axios": "^1.7.9",
     "sharp": "^0.33.5",
     "tesseract.js": "^5.1.1"
   },
@@ -30,8 +29,7 @@
     "win": {
       "target": [
         "portable"
-      ],
-      "artifactName": "ThanhNu-${version}-portable.exe"
+      ]
     },
     "artifactName": "CodeByThanhNu-${version}-portable.exe"
   }

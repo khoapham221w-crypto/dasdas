@@ -2,13 +2,12 @@
 const {app,BrowserWindow,ipcMain,globalShortcut,screen,desktopCapturer}=require('electron');
 const path=require('path');
 const fs=require('fs');
-const axios=require('axios');
 const sharp=require('sharp');
 const {createWorker}=require('tesseract.js');
 
 let win=null,overlay=null,ocrWorker=null,region=null;
 let stopRequested=false;
-const activeControllers=new Set();
+const activeVerifyWindows=new Set();
 
 const dir=path.join(app.getPath('userData'),'thanhnu-api');
 const file=path.join(dir,'state.json');
@@ -50,9 +49,9 @@ function load(){
   state.codeField='code';
   state.headers={'content-type':'application/json','accept':'application/json'};
   state.extraBody={};
-  state.concurrency=1;
+  state.concurrency=0; // 0 = gửi toàn bộ cặp đồng thời
   state.timeoutMs=10000;
-  state.stopOnChallenge=true;
+  state.stopOnChallenge=false;
   state.ocrScale=1;
   region=state.ocrRegion||null;
 }
@@ -70,79 +69,176 @@ function textPreview(data){
   }catch{return '';}
 }
 
-function cloudflareSignals(status,headers,data){
-  const h=headers||{};
-  const server=String(h.server||h.Server||'').toLowerCase();
-  const cfRay=String(h['cf-ray']||h['CF-RAY']||'');
-  const body=typeof data==='string'?data:JSON.stringify(data||{});
-  const bodySignal=/turnstile|cf-turnstile|challenges\.cloudflare\.com|cf_clearance|challenge-platform|captchaToken|captcha token|verify you are human|checking your browser|just a moment/i.test(body);
-  const headerSignal=server.includes('cloudflare') || !!cfRay;
-  const suspiciousStatus=[403,429,503].includes(Number(status));
-  return {
-    challenge: bodySignal || (headerSignal && suspiciousStatus),
-    bodySignal,headerSignal,suspiciousStatus
-  };
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+const MM88_URL='https://mm88code.com/';
+
+function closeVerifyWindow(bw){
+  if(!bw)return;
+  activeVerifyWindows.delete(bw);
+  try{if(!bw.isDestroyed())bw.destroy()}catch{}
 }
 
-function buildRequest(account,code){
-  // The public MM88 endpoint also requires a valid captchaToken for completed redemption.
-  // Thánh Nữ does not generate/replay/bypass that verification token.
-  return {
-    url:'https://api.mm88code.com/codes/use-code-public',
-    method:'POST',
-    timeout:10000,
-    validateStatus:()=>true,
-    headers:{
-      'content-type':'application/json',
-      'accept':'application/json',
-      'origin':'https://mm88code.com',
-      'referer':'https://mm88code.com/'
-    },
-    data:{username:account,code}
-  };
+async function pageState(bw){
+  if(!bw || bw.isDestroyed())return{ready:false,closed:true};
+  try{
+    return await bw.webContents.executeJavaScript(`(()=>{
+      const vis=e=>!!e && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && !e.disabled;
+      const all=[...document.querySelectorAll('input,textarea')].filter(vis);
+      const textInputs=all.filter(e=>!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));
+      const lower=e=>((e.name||'')+' '+(e.id||'')+' '+(e.placeholder||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();
+      const user=textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
+      const code=textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
+      const ts=document.querySelector('input[name="cf-turnstile-response"],textarea[name="cf-turnstile-response"]');
+      const verified=!!ts && String(ts.value||'').length>20;
+      const hasTurnstile=!!document.querySelector('.cf-turnstile,iframe[src*="challenges.cloudflare.com"],iframe[title*="Cloudflare" i]');
+      const body=(document.body?.innerText||'').replace(/\s+/g,' ').slice(0,5000);
+      return {ready:!!user&&!!code,verified,hasTurnstile,body};
+    })()` ,true);
+  }catch(e){return{ready:false,error:e.message};}
 }
 
-async function sendOne(account,code){
-  if(stopRequested) return {account,code,ok:false,status:'ĐÃ DỪNG'};
-  if(!state.endpoint) return {account,code,ok:false,status:'Chưa cấu hình endpoint'};
+async function fillPair(bw,account,code){
+  if(!bw || bw.isDestroyed())return false;
+  try{
+    return await bw.webContents.executeJavaScript(`(()=>{
+      const account=${JSON.stringify(account)}, code=${JSON.stringify(code)};
+      const vis=e=>!!e && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && !e.disabled;
+      const all=[...document.querySelectorAll('input,textarea')].filter(vis);
+      const textInputs=all.filter(e=>!['hidden','checkbox','radio','submit','button'].includes((e.type||'text').toLowerCase()));
+      const lower=e=>((e.name||'')+' '+(e.id||'')+' '+(e.placeholder||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();
+      const user=textInputs.find(e=>/user|account|tài khoản|tai khoan/.test(lower(e)))||textInputs[0]||null;
+      const codeEl=textInputs.find(e=>/code|mã|ma code/.test(lower(e)))||textInputs.find(e=>e!==user)||null;
+      const set=(el,val)=>{
+        if(!el)return;
+        const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+        const d=Object.getOwnPropertyDescriptor(proto,'value');
+        if(d?.set)d.set.call(el,val); else el.value=val;
+        el.dispatchEvent(new Event('input',{bubbles:true}));
+        el.dispatchEvent(new Event('change',{bubbles:true}));
+      };
+      set(user,account); set(codeEl,code);
+      return !!user&&!!codeEl;
+    })()`,true);
+  }catch{return false;}
+}
 
-  const controller=new AbortController();
-  activeControllers.add(controller);
-  const cfg=buildRequest(account,code);
-  cfg.signal=controller.signal;
+async function clickSubmit(bw){
+  if(!bw || bw.isDestroyed())return false;
+  try{
+    return await bw.webContents.executeJavaScript(`(()=>{
+      const vis=e=>!!e && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && !e.disabled;
+      const buttons=[...document.querySelectorAll('button,input[type=submit]')].filter(vis);
+      const txt=e=>((e.innerText||e.value||'')+' '+(e.getAttribute('aria-label')||'')).trim();
+      const b=buttons.find(e=>/kiểm tra ngay|kiem tra ngay|nhận code|nhan code|sử dụng|su dung|submit|gửi|gui/i.test(txt(e)))
+        ||buttons.find(e=>(e.type||'').toLowerCase()==='submit')||buttons[0];
+      if(!b)return false;
+      b.click(); return true;
+    })()`,true);
+  }catch{return false;}
+}
+
+function classifyPageText(body){
+  const t=String(body||'').toLowerCase();
+  if(/sử dụng code thành công|su dung code thanh cong|đã cộng|da cong/.test(t))return{done:true,ok:true,status:'THÀNH CÔNG'};
+  if(/mã code không tồn tại|ma code khong ton tai|đã hết hạn|da het han/.test(t))return{done:true,ok:false,status:'CODE KHÔNG HỢP LỆ/HẾT HẠN'};
+  if(/rate_limit_exceeded|vượt quá giới hạn|vuot qua gioi han/.test(t))return{done:true,ok:false,status:'RATE LIMIT'};
+  if(/lỗi dữ liệu không hợp lệ|loi du lieu khong hop le/.test(t))return{done:true,ok:false,status:'DỮ LIỆU KHÔNG HỢP LỆ'};
+  return{done:false};
+}
+
+async function waitForForm(bw,timeout=15000){
+  const until=Date.now()+timeout;
+  while(Date.now()<until && !stopRequested && bw && !bw.isDestroyed()){
+    const st=await pageState(bw);
+    if(st.ready)return st;
+    await sleep(250);
+  }
+  return null;
+}
+
+async function waitForVerificationOrShow(bw,account,code,index){
+  // Turnstile is allowed to run normally inside the real page. We never read,
+  // export, replay, generate, or submit its token ourselves.
+  const autoUntil=Date.now()+6500;
+  while(Date.now()<autoUntil && !stopRequested && !bw.isDestroyed()){
+    const st=await pageState(bw);
+    if(st.verified)return{verified:true,manual:false};
+    await sleep(200);
+  }
+  if(stopRequested || bw.isDestroyed())return{verified:false,stopped:true};
+
+  log(`Cặp #${index} cần xác minh trực tiếp trên MM88: ${account} / ${code}.`);
+  try{
+    bw.show();
+    bw.focus();
+    bw.setAlwaysOnTop(true,'floating');
+    setTimeout(()=>{try{if(!bw.isDestroyed())bw.setAlwaysOnTop(false)}catch{}},1200);
+  }catch{}
+
+  const manualUntil=Date.now()+120000;
+  while(Date.now()<manualUntil && !stopRequested && !bw.isDestroyed()){
+    const st=await pageState(bw);
+    if(st.verified){
+      try{bw.hide()}catch{}
+      return{verified:true,manual:true};
+    }
+    await sleep(250);
+  }
+  return{verified:false,timeout:!stopRequested};
+}
+
+async function waitForResult(bw,timeout=12000){
+  const until=Date.now()+timeout;
+  while(Date.now()<until && !stopRequested && bw && !bw.isDestroyed()){
+    const st=await pageState(bw);
+    const c=classifyPageText(st.body);
+    if(c.done)return{...c,preview:String(st.body||'').slice(0,260)};
+    await sleep(250);
+  }
+  return{done:false,ok:false,status:stopRequested?'ĐÃ DỪNG':'ĐÃ GỬI / CHỜ PHẢN HỒI',preview:''};
+}
+
+async function sendOne(account,code,index=1){
+  if(stopRequested)return{account,code,ok:false,status:'ĐÃ DỪNG'};
+
+  const bw=new BrowserWindow({
+    width:520,height:760,show:false,autoHideMenuBar:true,
+    title:`MM88 xác minh #${index} - Code By Thánh Nữ`,
+    webPreferences:{
+      contextIsolation:true,nodeIntegration:false,
+      backgroundThrottling:false,
+      partition:'persist:code-by-thanh-nu-mm88'
+    }
+  });
+  activeVerifyWindows.add(bw);
+  bw.on('closed',()=>activeVerifyWindows.delete(bw));
+  bw.webContents.setWindowOpenHandler(()=>({action:'deny'}));
 
   try{
-    const r=await axios(cfg);
-    const sig=cloudflareSignals(r.status,r.headers,r.data);
-    const responseText=textPreview(r.data);
-    const captchaRequired=/captchaToken|captcha token|captcha|turnstile|verification/i.test(responseText);
+    await bw.loadURL(MM88_URL);
+    const form=await waitForForm(bw,15000);
+    if(!form)return{account,code,ok:false,status:'KHÔNG TÌM THẤY FORM',preview:'MM88 chưa tải được ô tài khoản/code.'};
 
-    if(sig.challenge || captchaRequired){
-      if(state.stopOnChallenge){
-        stopRequested=true;
-        for(const c of activeControllers){
-          if(c!==controller){ try{c.abort()}catch{} }
-        }
-      }
-      return {
-        account,code,ok:false,http:r.status,status:'CẦN XÁC MINH',
-        challenge:true,preview:responseText || 'Endpoint yêu cầu xác minh hợp lệ.'
-      };
+    const filled=await fillPair(bw,account,code);
+    if(!filled)return{account,code,ok:false,status:'KHÔNG ĐIỀN ĐƯỢC FORM'};
+
+    const vr=await waitForVerificationOrShow(bw,account,code,index);
+    if(!vr.verified){
+      return{account,code,ok:false,status:vr.stopped?'ĐÃ DỪNG':'CẦN XÁC MINH',preview:vr.timeout?'Hết 120 giây chờ xác minh.':''};
     }
 
-    const ok=r.status>=200&&r.status<300;
-    return {
-      account,code,ok,http:r.status,
-      status:ok?'Đã gửi':'HTTP '+r.status,
-      preview:textPreview(r.data)
-    };
+    // Re-fill after verification in case the page re-rendered the form.
+    await fillPair(bw,account,code);
+    const clicked=await clickSubmit(bw);
+    if(!clicked)return{account,code,ok:false,status:'KHÔNG TÌM THẤY NÚT GỬI'};
+
+    const rr=await waitForResult(bw,12000);
+    return{account,code,ok:!!rr.ok,status:rr.status,preview:rr.preview||''};
   }catch(e){
-    if(e?.code==='ERR_CANCELED' || controller.signal.aborted){
-      return {account,code,ok:false,status:'ĐÃ DỪNG',preview:'Request đã hủy'};
-    }
-    return {account,code,ok:false,status:'Lỗi request',preview:e.message};
+    return{account,code,ok:false,status:'LỖI BROWSER',preview:e.message};
   }finally{
-    activeControllers.delete(controller);
+    closeVerifyWindow(bw);
   }
 }
 
@@ -152,56 +248,37 @@ async function runBatch(accounts,codes){
   codes=(codes||[]).map(x=>String(x).trim().toUpperCase()).filter(x=>/^[A-Z0-9]{6}$/.test(x));
   const limit=Math.min(accounts.length,codes.length);
   const jobs=[];
-  for(let i=0;i<limit;i++){
-    jobs.push({account:accounts[i],code:codes[i],index:i+1});
-  }
+  for(let i=0;i<limit;i++)jobs.push({account:accounts[i],code:codes[i],index:i+1});
 
-  const out=[];
-  let cursor=0,done=0;
-  const n=Math.max(1,Math.min(20,Number(state.concurrency)||5));
+  const out=new Array(jobs.length);
+  let done=0;
   emitProgress(0,jobs.length);
-  log(`Bắt đầu chế độ 1-1: ${jobs.length} request • concurrency ${n}`);
-  if(accounts.length!==codes.length){
-    log(`Ghép theo thứ tự 1-1 • dùng ${jobs.length} cặp đầu tiên (acc=${accounts.length}, code=${codes.length}).`);
-  }
+  log(`F2 batch: mở ${jobs.length} phiên MM88 song song; Turnstile chạy theo luồng xác minh bình thường của trang.`);
+  if(accounts.length!==codes.length)log(`Ghép 1-1 theo thứ tự • dùng ${jobs.length} cặp (acc=${accounts.length}, code=${codes.length}).`);
 
-  async function workerFn(){
-    while(true){
-      if(stopRequested) break;
-      const idx=cursor++;
-      if(idx>=jobs.length) break;
-      const j=jobs[idx];
-      const r=await sendOne(j.account,j.code);
-      out[idx]=r;
-      done++;
-      if(win)win.webContents.send('result',r);
-      emitProgress(done,jobs.length);
-
-      if(r.challenge){
-        log(`Website yêu cầu xác minh tại cặp #${j.index}: ${j.account} / ${j.code}.`);
-        if(state.stopOnChallenge){
-          log('Đã dừng toàn bộ batch để tránh tiếp tục gửi request.');
-          break;
-        }
-      }
+  await Promise.all(jobs.map(async(j,idx)=>{
+    if(stopRequested){
+      out[idx]={account:j.account,code:j.code,ok:false,status:'ĐÃ DỪNG'};
+    }else{
+      out[idx]=await sendOne(j.account,j.code,j.index);
     }
-  }
+    done++;
+    win?.webContents.send('result',out[idx]);
+    emitProgress(done,jobs.length);
+  }));
 
-  await Promise.all(Array.from({length:n},workerFn));
   state.results=out.filter(Boolean);
   state.updatedAt=Date.now();
   save();
-  log(stopRequested?`Đã dừng • hoàn thành ${done}/${jobs.length}`:`Hoàn thành ${done}/${jobs.length}`);
+  log(stopRequested?`Đã dừng • ${done}/${jobs.length}`:`Hoàn thành ${done}/${jobs.length}`);
   return state.results;
 }
 
 async function stopBatch(){
   stopRequested=true;
-  for(const c of activeControllers){
-    try{c.abort()}catch{}
-  }
-  log('Đã nhận lệnh STOP.');
-  return {ok:true};
+  for(const bw of [...activeVerifyWindows])closeVerifyWindow(bw);
+  log('Đã nhận lệnh STOP và đóng các cửa sổ xác minh.');
+  return{ok:true};
 }
 
 async function getOcr(){
@@ -326,7 +403,7 @@ async function runOcr(){
 function createWin(){
   win=new BrowserWindow({
     width:1300,height:860,minWidth:1080,minHeight:720,
-    title:'Code By Thánh Nữ v0.5.5',
+    title:'Code By Thánh Nữ v0.5.7',
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
   win.loadFile('renderer.html');
@@ -370,4 +447,4 @@ ipcMain.handle('pick',()=>{pickRegion();return true});
 ipcMain.handle('ocr',()=>runOcr().catch(e=>({ok:false,error:e.message})));
 ipcMain.handle('run',(_,accounts,codes)=>runBatch(accounts,codes));
 ipcMain.handle('stop',()=>stopBatch());
-ipcMain.handle('test',(_,account,code)=>sendOne(account,code));
+ipcMain.handle('test',(_,account,code)=>sendOne(account,code,1));

@@ -1,28 +1,27 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Code By Thánh Nữ v0.5.5</title><link rel="stylesheet" href="style.css"></head>
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Code By Thánh Nữ v0.5.7</title><link rel="stylesheet" href="style.css"></head>
 <body><div class="app">
-<header><div><h1>CODE BY THÁNH NỮ</h1><span>API-FIRST • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5.5 • Code By Thánh Nữ</div></header>
+<header><div><h1>CODE BY THÁNH NỮ</h1><span>BROWSER VERIFY • CHẠY NGẦM • OCR BATCH</span></div><div class="badge">v0.5.7 • F2 AUTO</div></header>
 
 <section class="card config">
 <div class="title">MM88 PRESET</div>
 <div class="preset">
   <div><span>Endpoint</span><b>https://api.mm88code.com/codes/use-code-public</b></div>
-  <div><span>Method</span><b>POST / JSON</b></div>
+  <div><span>Verify</span><b>TRANG MM88 / TURNSTILE BÌNH THƯỜNG</b></div>
   <div><span>Mapping</span><b>code 1 → acc 1</b></div>
-  <div><span>Concurrency</span><b>1</b></div>
+  <div><span>Concurrency</span><b>CÁC CẶP KHỞI CHẠY SONG SONG</b></div>
 </div>
-<div class="warn">API thật có field <b>captchaToken</b>. Bản này không tạo/replay/bypass token xác minh; khi backend yêu cầu xác minh, tool sẽ dừng và báo CẦN XÁC MINH.</div>
+<div class="warn">Tool không tự tạo/replay/bypass <b>captchaToken</b>. Mỗi cặp chạy trên trang MM88 thật: nếu Turnstile tự xác minh thì tiếp tục ngầm; nếu cần người dùng, cửa sổ MM88 sẽ hiện để bạn xác minh rồi tool tự tiếp tục.</div>
 </section>
 
 <section class="cols">
 <section class="card"><div class="title">TÀI KHOẢN</div><textarea id="accounts" placeholder="Mỗi dòng 1 tài khoản"></textarea><div id="ac">0 acc</div></section>
-<section class="card"><div class="title">BATCH CODE</div><div class="mini">Chế độ hiện tại: code 1 → acc 1, code 2 → acc 2, ghép theo thứ tự.</div>
-<div class="row"><button id="pick">F1 Chọn vùng</button><button id="ocr" class="accent">F2 OCR</button><b id="ms">- ms</b></div>
+<section class="card"><div class="title">BATCH CODE</div><div class="mini">F2 = OCR → tự chạy ngay. Mapping 1-1 theo thứ tự. Mỗi cặp mở phiên MM88; xác minh hợp lệ xong sẽ tự gửi.</div>
+<div class="row"><button id="pick">F1 Chọn vùng</button><button id="ocr" class="accent">F2 OCR + CHẠY</button><b id="ms">- ms</b></div>
 <div id="regionInfo" class="mini">Vùng OCR: chưa chọn</div>
 <textarea id="codes" placeholder="Mỗi dòng 1 code"></textarea><div id="cc">0 code</div></section>
 </section>
 
 <section class="card actions">
-  <button id="run" class="green">▶ CHẠY NGẦM TẤT CẢ</button>
   <button id="stop" class="stop">■ STOP</button>
   <button id="clear">Xóa kết quả</button>
   <div class="progress"><div id="bar"></div></div>
@@ -32,5 +31,5 @@
 
 <section class="card"><div class="title">KẾT QUẢ TỪNG CẶP TÀI KHOẢN / CODE</div><div class="tablewrap"><table><thead><tr><th>Tài khoản</th><th>Code</th><th>HTTP</th><th>Trạng thái</th><th>Response</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 <section class="card"><div class="title">LOG</div><pre id="log"></pre></section>
-<footer>Thánh Nữ v0.5.4 • HTTP/API-first • STOP batch • JSON/Form/Query • lưu OCR region • không bypass Cloudflare/Turnstile</footer>
+<footer>Code By Thánh Nữ v0.5.7 • F2 OCR + AUTO RUN • xác minh Turnstile theo trang thật • không bypass Cloudflare/Turnstile</footer>
 </div><script src="renderer.js"></script></body></html>
